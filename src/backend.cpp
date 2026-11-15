@@ -45,9 +45,9 @@ void Backend::startCava() {
         << "channels = mono\n\n"
         << "[smoothing]\n"
         << "monstercat = 0\n"
-        << "integral = 15\n"
-        << "gravity = 65\n"
-        << "noise_reduction = 0.10\n";
+        << "integral = 65\n"
+        << "gravity = 100\n"
+        << "noise_reduction = 0.50\n";
     m_configFile.flush();
 
     connect(&m_cavaProcess, &QProcess::readyReadStandardOutput, this, &Backend::onCavaOutput);
@@ -68,26 +68,10 @@ void Backend::onCavaOutput() {
     const char *data = m_readBuffer.constData() + latestStart;
 
     qreal rawVals[64];
-    qreal rawFramePeak = 0.0;
     for (int i = 0; i < 64; ++i) {
         quint8 val = static_cast<quint8>(data[i]);
-        qreal norm = static_cast<qreal>(val) / 255.0;
-        rawVals[i] = norm;
-        if (norm > rawFramePeak) {
-            rawFramePeak = norm;
-        }
+        rawVals[i] = static_cast<qreal>(val) / 255.0;
     }
-
-    // Dynamic Automatic Gain Control (AGC):
-    // Fast attack captures peak loudness of the track, slow decay preserves dynamic range
-    // so quiet verses stay calm and drops hit with explosive contrast
-    if (rawFramePeak > m_rollingPeak) {
-        m_rollingPeak = m_rollingPeak * 0.85 + rawFramePeak * 0.15;
-    } else {
-        m_rollingPeak = m_rollingPeak * 0.9985;
-    }
-    m_rollingPeak = std::clamp(m_rollingPeak, 0.22, 1.0);
-    qreal autoGain = 1.0 / m_rollingPeak;
 
     qreal bassSum = 0.0;
     qreal bassMax = 0.0;
@@ -95,74 +79,68 @@ void Backend::onCavaOutput() {
     qreal trebSum = 0.0;
 
     for (int i = 0; i < 64; ++i) {
-        qreal boosted = std::min(1.0, rawVals[i] * autoGain);
-        if (boosted > m_bars[i]) {
-            m_bars[i] = m_bars[i] * 0.20 + boosted * 0.80;
+        qreal val = rawVals[i];
+        // Authentic frequency response: instantaneous attack on transients, fluid natural decay
+        if (val > m_bars[i]) {
+            m_bars[i] = m_bars[i] * 0.15 + val * 0.85;
         } else {
-            m_bars[i] = m_bars[i] * 0.80 + boosted * 0.20;
+            m_bars[i] = m_bars[i] * 0.78 + val * 0.22;
         }
 
-        // Sub-bass & Bass: Bars 0-14 (40Hz - 450Hz)
-        if (i < 15) {
-            bassSum += boosted;
-            if (boosted > bassMax) {
-                bassMax = boosted;
+        // Sub-bass & Bass: Bars 0-11 (40Hz - 350Hz)
+        if (i < 12) {
+            bassSum += m_bars[i];
+            if (m_bars[i] > bassMax) {
+                bassMax = m_bars[i];
             }
         } else if (i < 36) {
-            // Mids & Vocals: Bars 15-35 (450Hz - 3200Hz)
-            midSum += boosted;
+            // Mids & Vocals: Bars 12-35 (350Hz - 3200Hz)
+            midSum += m_bars[i];
         } else {
             // Treble & High Sparkle: Bars 36-63 (3200Hz - 16000Hz)
-            trebSum += boosted;
+            trebSum += m_bars[i];
         }
     }
 
-    // Blend peak transients (for instant 808 kick response) and body energy
-    m_bass = bassMax * 0.65 + (bassSum / 15.0) * 0.35;
-    m_mid = midSum / 21.0;
+    // Accurate representation of bass, mid, and treble levels
+    m_bass = bassMax * 0.70 + (bassSum / 12.0) * 0.30;
+    m_mid = midSum / 24.0;
     m_treble = trebSum / 28.0;
 
     // -------------------------------------------------------------
-    // Precise 808 Kick Drum & Drop Beat Detection
+    // Authentic 808 Kick Drum & Beat Transient Detection
     // -------------------------------------------------------------
-    // Sub-bass & Bass kick drum is in bars 0 to 8 (~40Hz - 200Hz)
     qreal kickVal = 0.0;
-    for (int i = 0; i <= 8; ++i) {
+    for (int i = 0; i < 8; ++i) {
         if (m_bars[i] > kickVal) {
             kickVal = m_bars[i];
         }
     }
-    kickVal = std::max(kickVal, m_bass);
 
     qreal kickRise = kickVal - m_prevKickEnergy;
     m_prevKickEnergy = kickVal;
 
-    // Moving average of kick energy for dynamic contrast
-    m_kickEnergyAvg = m_kickEnergyAvg * 0.94 + kickVal * 0.06;
+    // Running baseline of low-end energy
+    m_kickEnergyAvg = m_kickEnergyAvg * 0.95 + kickVal * 0.05;
 
     if (m_beatCooldown > 0) {
         m_beatCooldown--;
     }
 
-    // High-impact percussive kick detection:
-    // Triggers on sharp transient onset above floor (0.22)
-    // AND stays sensitive during heavy drops (kickVal > 0.45)
-    bool isKickSpike = (m_beatCooldown == 0) && (kickVal > 0.22) &&
-        ((kickRise > 0.022 && kickVal > m_kickEnergyAvg * 1.06) || (kickVal > 0.45 && kickRise > 0.012));
+    // Only fire on genuine percussive transients (sharp onset well above the rolling average)
+    bool isKickSpike = (m_beatCooldown == 0) && (kickVal > 0.28) && (kickRise > 0.045) && (kickVal > m_kickEnergyAvg * 1.18);
 
     if (isKickSpike) {
         m_isBeatHit = true;
-        m_beatCooldown = 3; // ~50ms cooldown for fast trap/EDM beats
+        m_beatCooldown = 6; // ~100ms cooldown for authentic drum hit spacing
 
         if (m_shakeEnabled) {
-            qreal kickStrength = std::clamp((kickVal - 0.20) / 0.65, 0.0, 1.0);
-            // Heavy Bass Camera Zoom Punch (up to 1.09x scale expansion)
-            m_shakeScale = 1.0 + 0.088 * kickStrength;
-            // Visible cinematic vertical recoil (up to 15px)
-            m_shakeY = 15.0 * kickStrength;
-            // Alternating horizontal kick punch (up to 9px)
+            qreal kickStrength = std::clamp((kickVal - 0.28) / 0.55, 0.0, 1.0);
+            // Subtle, cinematic punch (up to 2.8% scale zoom, 4.5px vertical recoil)
+            m_shakeScale = 1.0 + 0.028 * kickStrength;
+            m_shakeY = 4.5 * kickStrength;
             m_shakeDir = !m_shakeDir;
-            m_shakeX = (m_shakeDir ? 9.0 : -9.0) * kickStrength;
+            m_shakeX = (m_shakeDir ? 2.5 : -2.5) * kickStrength;
         }
     } else {
         m_isBeatHit = false;

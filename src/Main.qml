@@ -202,14 +202,14 @@ ApplicationWindow {
                 if (backend.particlesEnabled) {
                     var maxDist = Math.max(width, height) * 0.85;
                     var bassFactor = backend.bass;
-                    var speedMult = 1.0 + bassFactor * 4.2;
-                    var beatKick = backend.isBeatHit ? (18.0 + bassFactor * 26.0) : 0;
+                    var speedMult = 1.0 + bassFactor * 1.6;
+                    var beatKick = backend.isBeatHit ? (2.5 + bassFactor * 4.0) : 0;
 
                     ctx.beginPath();
                     for (var pIdx = 0; pIdx < particles.length; pIdx++) {
                         var p = particles[pIdx];
                         p.rad += p.speed * speedMult + beatKick;
-                        p.angle += p.spin * (1.0 + bassFactor * 2.4);
+                        p.angle += p.spin * (1.0 + bassFactor * 1.5);
 
                         if (p.rad > maxDist) {
                             p.rad = 130 + Math.random() * 50;
@@ -218,13 +218,13 @@ ApplicationWindow {
 
                         var px = cx + Math.cos(p.angle) * p.rad;
                         var py = cy + Math.sin(p.angle) * p.rad;
-                        var pSize = p.size * (1.0 + bassFactor * 0.45);
+                        var pSize = p.size * (1.0 + bassFactor * 0.35);
 
                         ctx.moveTo(px + pSize, py);
                         ctx.arc(px, py, pSize, 0, Math.PI * 2);
                     }
                     ctx.fillStyle = (backend.mode === 1) ? "#FFFFFF" : curTheme.c1;
-                    ctx.globalAlpha = 0.38 + bassFactor * 0.32;
+                    ctx.globalAlpha = 0.35 + bassFactor * 0.25;
                     ctx.fill();
                 }
 
@@ -235,8 +235,8 @@ ApplicationWindow {
                     ctx.globalAlpha = 1.0; // Reset full opacity (essential for crisp solid rendering)
                     var minDim = Math.min(width, height);
                     // Responsive subwoofer disc radius: scales with screen, pulses subtly on heavy 808 kicks
-                    var baseRadius = minDim * 0.22 * (1.0 + backend.bass * 0.06);
-                    var baseOutline = Math.max(8.0, baseRadius * 0.10); // sleek circular ring during calm parts
+                    var baseRadius = minDim * 0.22 * (1.0 + backend.bass * 0.035);
+                    var baseOutline = Math.max(6.0, baseRadius * 0.08); // sleek circular ring during calm parts
                     var N = 96;
                     var halfN = N / 2;
 
@@ -249,12 +249,10 @@ ApplicationWindow {
                     }
                     var tAmps = visCanvas.trapAmps;
 
-                    // 1. Natural Organic Frequency Spectrum Sculpting (No Hardcoding)
+                    // 1. Natural Organic Frequency Spectrum Sculpting (Authentic Audio Response)
                     // Sample the 64 real audio frequency bars symmetrically from top (12 o'clock) down to bottom (6 o'clock)
                     // Sub-bass & 808s flare the upper crests; mids/vocals sculpt the sides; treble ripples the base
                     var numBars = bars.length;
-                    var bassEnergy = backend.bass;
-                    var beatResonance = 1.0 + bassEnergy * 0.50; // Dynamic breathing excursion on heavy drops
 
                     for (var i = 0; i < N; i++) {
                         var symIdx = (i <= halfN) ? i : (N - i);
@@ -268,27 +266,15 @@ ApplicationWindow {
                         var frac = bIdx - i0;
                         var rawFreq = (bars[i0] || 0.0) * (1.0 - frac) + (bars[i1] || 0.0) * frac;
 
-                        // Frequency-dependent dynamic reach:
-                        // Bass (t < 0.35) punches high with huge reach; mids (0.35 - 0.70) sculpt rich vocal/synth waves;
-                        // Treble (0.70 - 1.0) sparkles with delicate crisp ripples
-                        var freqWeight = 1.0;
-                        if (t < 0.35) {
-                            freqWeight = 1.25;
-                        } else if (t < 0.70) {
-                            freqWeight = 1.05;
-                        } else {
-                            freqWeight = 0.85;
-                        }
+                        // Authentic audio excursion directly driven by frequency amplitude
+                        var targetVal = rawFreq;
 
-                        // Dynamic excursion: clean power curve so silence/hum stays flat, real beats soar
-                        var targetVal = Math.pow(rawFreq, 1.20) * freqWeight * beatResonance;
-
-                        // Fast attack on beat hits for instant transient response; buttery smooth elastic spring decay
+                        // Fast attack on beat hits for instant transient response; smooth elastic spring decay
                         var cur = tAmps[i];
                         if (targetVal > cur) {
-                            cur = cur * 0.35 + targetVal * 0.65;
+                            cur = cur * 0.25 + targetVal * 0.75;
                         } else {
-                            cur = cur * 0.86;
+                            cur = cur * 0.82;
                         }
                         tAmps[i] = cur;
                     }
@@ -304,8 +290,7 @@ ApplicationWindow {
                     }
 
                     // 3. Compute Radii with Natural Excursion:
-                    var baseOutline = Math.max(8.0, baseRadius * 0.09);
-                    var maxExcursion = baseRadius * 1.20;
+                    var maxExcursion = baseRadius * 1.0;
                     var waveR = visCanvas.waveR;
                     var waveSpread = visCanvas.waveSpread;
 
@@ -316,7 +301,7 @@ ApplicationWindow {
 
                         // Radiant Chromatic Flare: fans out with excursion and bass power
                         var flareRatio = Math.min(1.0, excursion / Math.max(1.0, maxExcursion * 0.8));
-                        waveSpread[k] = 2.5 + flareRatio * (baseRadius * 0.45);
+                        waveSpread[k] = 2.0 + flareRatio * (baseRadius * 0.32);
                     }
 
                     // Zero-allocation GPU Spline Tracer (Uses precomputed lookup tables, eliminates GC stutter)
@@ -442,27 +427,27 @@ ApplicationWindow {
                 // MODE 2: NEON TRAP CIRCLE (Dual-Color Gradient Spectrum)
                 // ==============================================================
                 else if (backend.mode === 2) {
-                    var baseRadius2 = 115 + backend.bass * 38;
+                    var baseRadius2 = 110 + backend.bass * 20;
                     var totalBars2 = 64;
                     var halfBars2 = totalBars2 / 2;
 
                     var shockwaves = visCanvas.shockwaves;
-                    if (backend.isBeatHit && shockwaves.length < 5) {
-                        shockwaves.push({ r: baseRadius2, alpha: 1.0 });
+                    if (backend.isBeatHit && shockwaves.length < 4) {
+                        shockwaves.push({ r: baseRadius2, alpha: 0.9 });
                     }
 
                     // Expanding Bass Shockwaves
                     for (var s2 = shockwaves.length - 1; s2 >= 0; s2--) {
                         var sw2 = shockwaves[s2];
-                        sw2.r += 6.5;
-                        sw2.alpha -= 0.032;
+                        sw2.r += 4.5;
+                        sw2.alpha -= 0.035;
                         if (sw2.alpha <= 0) {
                             shockwaves.splice(s2, 1);
                             continue;
                         }
                         ctx.strokeStyle = curTheme.c1;
-                        ctx.globalAlpha = sw2.alpha * 0.7;
-                        ctx.lineWidth = 2.5;
+                        ctx.globalAlpha = sw2.alpha * 0.6;
+                        ctx.lineWidth = 2.2;
                         ctx.beginPath();
                         ctx.arc(cx, cy, sw2.r, 0, Math.PI * 2);
                         ctx.stroke();
@@ -478,7 +463,7 @@ ApplicationWindow {
                         barIdx2 = Math.max(0, Math.min(bars.length - 1, barIdx2));
 
                         var val2 = bars[barIdx2] || 0.0;
-                        var barLen2 = val2 * 165 + 4;
+                        var barLen2 = val2 * 115 + 3;
 
                         var bx1 = cx + Math.cos(angle2) * baseRadius2;
                         var by1 = cy + Math.sin(angle2) * baseRadius2;
@@ -506,19 +491,19 @@ ApplicationWindow {
 
                     // Central Ring Perimeter Glow
                     ctx.strokeStyle = curTheme.c1;
-                    ctx.lineWidth = 3.5 + backend.bass * 2.5;
+                    ctx.lineWidth = 3.0 + backend.bass * 2.0;
                     ctx.beginPath();
                     ctx.arc(cx, cy, baseRadius2, 0, Math.PI * 2);
                     ctx.stroke();
 
                     // Pulsing Bass Core Orb
-                    var innerR2 = (baseRadius2 * 0.62) * (1.0 + backend.bass * 0.25);
+                    var innerR2 = (baseRadius2 * 0.60) * (1.0 + backend.bass * 0.18);
                     var innerGrad2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR2);
                     innerGrad2.addColorStop(0, curTheme.c1);
                     innerGrad2.addColorStop(0.6, curTheme.c2);
                     innerGrad2.addColorStop(1, "transparent");
                     ctx.fillStyle = innerGrad2;
-                    ctx.globalAlpha = 0.75 + backend.bass * 0.25;
+                    ctx.globalAlpha = 0.70 + backend.bass * 0.20;
                     ctx.beginPath();
                     ctx.arc(cx, cy, innerR2, 0, Math.PI * 2);
                     ctx.fill();
@@ -531,7 +516,7 @@ ApplicationWindow {
                     var ggap2 = 7;
                     var startGx2 = cx - (glyphBars2.length * (gw2 + ggap2)) / 2 + gw2 / 2;
                     for (var g2 = 0; g2 < glyphBars2.length; g2++) {
-                        var gh2 = (glyphBars2[g2] * (26 + backend.bass * 28));
+                        var gh2 = (glyphBars2[g2] * (22 + backend.bass * 18));
                         drawRoundRect(ctx, startGx2 + g2 * (gw2 + ggap2), cy - gh2 / 2, gw2, gh2, 2);
                         ctx.fill();
                     }
@@ -546,7 +531,7 @@ ApplicationWindow {
                     var availWidth = width - margin * 2;
                     var barWidth = (availWidth / totalBars) * 0.72;
                     var barGap = (availWidth / totalBars) * 0.28;
-                    var maxBarHeight = height * 0.60;
+                    var maxBarHeight = height * 0.52;
                     var baseY = height - 120;
 
                     for (var b = 0; b < totalBars; b++) {
@@ -588,7 +573,7 @@ ApplicationWindow {
                     waveGrad.addColorStop(1, curTheme.c1);
 
                     ctx.strokeStyle = waveGrad;
-                    ctx.lineWidth = 4.0 + backend.bass * 3.0;
+                    ctx.lineWidth = 3.5 + backend.bass * 2.0;
                     ctx.globalAlpha = 0.9;
                     ctx.beginPath();
 
@@ -597,20 +582,20 @@ ApplicationWindow {
 
                     for (var w = 0; w < bars.length; w++) {
                         var normX = w * step;
-                        var waveAmp = (bars[w] || 0.0) * (height * 0.35);
+                        var waveAmp = (bars[w] || 0.0) * (height * 0.26);
                         var waveY = cy - waveAmp * Math.sin((w / bars.length) * Math.PI);
                         ctx.lineTo(normX, waveY);
                     }
                     ctx.stroke();
 
                     // Mirrored Lower Wave Ribbon
-                    ctx.lineWidth = 2.5;
-                    ctx.globalAlpha = 0.42;
+                    ctx.lineWidth = 2.2;
+                    ctx.globalAlpha = 0.40;
                     ctx.beginPath();
                     ctx.moveTo(0, cy);
                     for (var w2 = 0; w2 < bars.length; w2++) {
                         var normX2 = w2 * step;
-                        var waveAmp2 = (bars[w2] || 0.0) * (height * 0.22);
+                        var waveAmp2 = (bars[w2] || 0.0) * (height * 0.16);
                         var waveY2 = cy + waveAmp2 * Math.sin((w2 / bars.length) * Math.PI);
                         ctx.lineTo(normX2, waveY2);
                     }
@@ -624,7 +609,7 @@ ApplicationWindow {
                     var horizonY = height * 0.50;
 
                     // 1. Retro Synthwave Sun on Horizon (Clean sunset setting into the grid)
-                    var sunRadius = 108 + backend.bass * 26;
+                    var sunRadius = 100 + backend.bass * 16;
                     var sunY = horizonY - sunRadius * 0.40;
 
                     ctx.save();
@@ -669,7 +654,7 @@ ApplicationWindow {
                     horizGrad.addColorStop(0.5, curTheme.c2);
                     horizGrad.addColorStop(1, curTheme.c1);
                     ctx.strokeStyle = horizGrad;
-                    ctx.lineWidth = 2.8 + backend.bass * 2.0;
+                    ctx.lineWidth = 2.4 + backend.bass * 1.6;
                     ctx.globalAlpha = 0.90;
 
                     ctx.beginPath();
@@ -679,7 +664,7 @@ ApplicationWindow {
                     for (var hx = 0; hx <= numHorizPts * 2; hx++) {
                         var bIdx = (hx <= numHorizPts) ? (numHorizPts - hx) : (hx - numHorizPts);
                         bIdx = Math.min(bars.length - 1, Math.max(0, bIdx));
-                        var barAmp = (bars[bIdx] || 0.0) * (42.0 + backend.bass * 36.0);
+                        var barAmp = (bars[bIdx] || 0.0) * (30.0 + backend.bass * 20.0);
                         var px = hx * stepX;
                         // Subtly taper off wave amplitude near center so it doesn't obscure the sun
                         var distFromCenter = Math.abs(px - cx);
@@ -731,7 +716,7 @@ ApplicationWindow {
                 // MODE 5: 3D SINGULARITY (Interstellar Black Hole & Accretion Disc)
                 // ==============================================================
                 else if (backend.mode === 5) {
-                    var holeRadius = (85 + backend.bass * 25);
+                    var holeRadius = (80 + backend.bass * 16);
                     var tiltS = 0.40;
                     var points = 64;
 
@@ -742,7 +727,7 @@ ApplicationWindow {
                             var spAngle = (sp / points) * Math.PI * 2 + visCanvas.singularityRot * (pass === 0 ? 1 : -1);
                             var spIdx = sp % (bars.length / 2);
                             var spVal = bars[spIdx] || 0.0;
-                            var rDisc = holeRadius + 30 + spVal * 110 + (pass * 28);
+                            var rDisc = holeRadius + 24 + spVal * 80 + (pass * 20);
                             var sx = cx + Math.cos(spAngle) * rDisc;
                             var sy = cy + Math.sin(spAngle) * rDisc * tiltS;
 
