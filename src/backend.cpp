@@ -96,7 +96,11 @@ void Backend::onCavaOutput() {
 
     for (int i = 0; i < 64; ++i) {
         qreal boosted = std::min(1.0, rawVals[i] * autoGain);
-        m_bars[i] = boosted;
+        if (boosted > m_bars[i]) {
+            m_bars[i] = m_bars[i] * 0.20 + boosted * 0.80;
+        } else {
+            m_bars[i] = m_bars[i] * 0.80 + boosted * 0.20;
+        }
 
         // Sub-bass & Bass: Bars 0-14 (40Hz - 450Hz)
         if (i < 15) {

@@ -127,10 +127,13 @@ ApplicationWindow {
 
             property real gridOffsetZ: 0
             property real singularityRot: 0
+            property var cosTable: []
+            property var sinTable: []
 
-            Connections {
-                target: backend
-                function onAudioUpdated() {
+            // Silky 60 FPS VSync Animation Loop (Eliminates dropped frames and pipe jitter)
+            FrameAnimation {
+                running: true
+                onTriggered: {
                     visCanvas.gridOffsetZ = (visCanvas.gridOffsetZ + 3.5 + backend.bass * 8.0) % 40;
                     visCanvas.singularityRot += 0.008 + backend.bass * 0.02;
                     visCanvas.requestPaint();
@@ -143,6 +146,13 @@ ApplicationWindow {
             property var trapAmps: null
 
             Component.onCompleted: {
+                var N_pts = 96;
+                for (var k = 0; k < N_pts; k++) {
+                    var ang = (k / N_pts) * Math.PI * 2 - Math.PI / 2;
+                    cosTable.push(Math.cos(ang));
+                    sinTable.push(Math.sin(ang));
+                }
+
                 var cx = width > 0 ? width / 2 : 640;
                 var cy = height > 0 ? height / 2 : 360;
                 var maxR = Math.max(cx, cy) * 1.25;
@@ -252,12 +262,12 @@ ApplicationWindow {
                         // Dynamic excursion: clean power curve so silence/hum stays flat, real beats soar
                         var targetVal = Math.pow(rawFreq, 1.20) * freqWeight * beatResonance;
 
-                        // Fast attack on beat hits (0.72) for instant transient response; snappy spring decay (0.82)
+                        // Fast attack on beat hits for instant transient response; buttery smooth elastic spring decay
                         var cur = tAmps[i];
                         if (targetVal > cur) {
-                            cur = cur * 0.28 + targetVal * 0.72;
+                            cur = cur * 0.35 + targetVal * 0.65;
                         } else {
-                            cur = cur * 0.82;
+                            cur = cur * 0.86;
                         }
                         tAmps[i] = cur;
                     }
@@ -277,12 +287,8 @@ ApplicationWindow {
                     var maxExcursion = baseRadius * 1.20;
                     var waveR = new Float32Array(N);
                     var waveSpread = new Float32Array(N);
-                    var angles = new Float32Array(N);
 
                     for (var k = 0; k < N; k++) {
-                        var angle = (k / N) * Math.PI * 2 - Math.PI / 2;
-                        angles[k] = angle;
-
                         var amp = smoothed[k];
                         var excursion = amp * maxExcursion;
                         waveR[k] = baseRadius + baseOutline + excursion;
@@ -292,69 +298,65 @@ ApplicationWindow {
                         waveSpread[k] = 2.5 + flareRatio * (baseRadius * 0.45);
                     }
 
-                    // Precalculate point coordinates for any layer factor
-                    function buildLayerPts(factor) {
-                        var pts = new Array(N);
-                        for (var p = 0; p < N; p++) {
-                            var rL = waveR[p] + waveSpread[p] * factor;
-                            pts[p] = {
-                                x: cx + Math.cos(angles[p]) * rL,
-                                y: cy + Math.sin(angles[p]) * rL
-                            };
-                        }
-                        return pts;
-                    }
-
-                    function traceSpline(pts) {
+                    // Zero-allocation GPU Spline Tracer (Uses precomputed lookup tables, eliminates GC stutter)
+                    function traceSplineFactor(factor) {
                         ctx.beginPath();
-                        var pLast = pts[N - 1];
-                        var p0 = pts[0];
-                        ctx.moveTo((pLast.x + p0.x) * 0.5, (pLast.y + p0.y) * 0.5);
+                        var rLast = waveR[N - 1] + waveSpread[N - 1] * factor;
+                        var xLast = cx + visCanvas.cosTable[N - 1] * rLast;
+                        var yLast = cy + visCanvas.sinTable[N - 1] * rLast;
+                        var r0 = waveR[0] + waveSpread[0] * factor;
+                        var x0 = cx + visCanvas.cosTable[0] * r0;
+                        var y0 = cy + visCanvas.sinTable[0] * r0;
+
+                        ctx.moveTo((xLast + x0) * 0.5, (yLast + y0) * 0.5);
                         for (var j = 0; j < N; j++) {
-                            var pCur = pts[j];
-                            var pNxt = pts[(j + 1) % N];
-                            ctx.quadraticCurveTo(pCur.x, pCur.y, (pCur.x + pNxt.x) * 0.5, (pCur.y + pNxt.y) * 0.5);
+                            var jNxt = (j + 1) % N;
+                            var rCur = waveR[j] + waveSpread[j] * factor;
+                            var rNxt = waveR[jNxt] + waveSpread[jNxt] * factor;
+                            var xCur = cx + visCanvas.cosTable[j] * rCur;
+                            var yCur = cy + visCanvas.sinTable[j] * rCur;
+                            var xNxt = cx + visCanvas.cosTable[jNxt] * rNxt;
+                            var yNxt = cy + visCanvas.sinTable[jNxt] * rNxt;
+                            ctx.quadraticCurveTo(xCur, yCur, (xCur + xNxt) * 0.5, (yCur + yNxt) * 0.5);
                         }
                         ctx.closePath();
                     }
-
-                    var baseWavePts = buildLayerPts(0.0);
 
                     // 4. Stroke Giant Radiant Chromatic Layers (Electric Neon Behind the Horns)
                     var bassEnergy = backend.bass;
 
                     // Layer 5: Electric Cyan / Sky Blue Aura
-                    traceSpline(buildLayerPts(1.0));
+                    traceSplineFactor(1.0);
                     ctx.strokeStyle = "rgba(0, 240, 255, " + (0.50 + bassEnergy * 0.45) + ")";
                     ctx.lineWidth = Math.max(3.2, baseRadius * 0.035);
                     ctx.stroke();
 
                     // Layer 4: Neon Electric Green
-                    traceSpline(buildLayerPts(0.78));
+                    traceSplineFactor(0.78);
                     ctx.strokeStyle = "rgba(0, 255, 60, " + (0.65 + bassEnergy * 0.30) + ")";
                     ctx.lineWidth = Math.max(2.8, baseRadius * 0.030);
                     ctx.stroke();
 
                     // Layer 3: Vibrant Bright Yellow
-                    traceSpline(buildLayerPts(0.55));
+                    traceSplineFactor(0.55);
                     ctx.strokeStyle = "rgba(255, 235, 0, " + (0.80 + bassEnergy * 0.18) + ")";
                     ctx.lineWidth = Math.max(2.5, baseRadius * 0.026);
                     ctx.stroke();
 
                     // Layer 2: Warm Deep Orange
-                    traceSpline(buildLayerPts(0.32));
+                    traceSplineFactor(0.32);
                     ctx.strokeStyle = "rgba(255, 115, 0, " + (0.90 + bassEnergy * 0.10) + ")";
                     ctx.lineWidth = Math.max(2.3, baseRadius * 0.023);
                     ctx.stroke();
 
                     // Layer 1: Crimson Red
-                    traceSpline(buildLayerPts(0.12));
+                    traceSplineFactor(0.12);
                     ctx.strokeStyle = "rgba(255, 0, 45, 0.98)";
                     ctx.lineWidth = Math.max(2.0, baseRadius * 0.020);
                     ctx.stroke();
 
                     // 5. Solid Pure White Liquid Wave Body (Cleanly covers inner chromatic edges)
-                    traceSpline(baseWavePts);
+                    traceSplineFactor(0.0);
                     ctx.fillStyle = "#FFFFFF";
                     ctx.fill();
 
