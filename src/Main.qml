@@ -42,37 +42,40 @@ ApplicationWindow {
     // HUD visibility & Cinema Fullscreen mode
     property bool hudUserVisible: false
 
-    Shortcut { sequence: "H"; onActivated: { hudUserVisible = !hudUserVisible; if (hudUserVisible) hudIdleTimer.restart(); } }
-    Shortcut { sequence: "h"; onActivated: { hudUserVisible = !hudUserVisible; if (hudUserVisible) hudIdleTimer.restart(); } }
+    Shortcut { sequence: "H"; context: Qt.ApplicationShortcut; onActivated: { hudUserVisible = !hudUserVisible; if (hudUserVisible) hudIdleTimer.restart(); } }
+    Shortcut { sequence: "h"; context: Qt.ApplicationShortcut; onActivated: { hudUserVisible = !hudUserVisible; if (hudUserVisible) hudIdleTimer.restart(); } }
 
     // Keyboard Shortcuts
-    Shortcut { sequence: "1"; onActivated: backend.setMode(0) }
-    Shortcut { sequence: "2"; onActivated: backend.setMode(1) }
-    Shortcut { sequence: "3"; onActivated: backend.setMode(2) }
-    Shortcut { sequence: "4"; onActivated: backend.setMode(3) }
-    Shortcut { sequence: "5"; onActivated: backend.setMode(4) }
-    Shortcut { sequence: "6"; onActivated: backend.setMode(5) }
-    Shortcut { sequence: "T"; onActivated: backend.nextTheme() }
-    Shortcut { sequence: "t"; onActivated: backend.nextTheme() }
-    Shortcut { sequence: "P"; onActivated: backend.toggleParticles() }
-    Shortcut { sequence: "p"; onActivated: backend.toggleParticles() }
-    Shortcut { sequence: "S"; onActivated: backend.toggleShake() }
-    Shortcut { sequence: "s"; onActivated: backend.toggleShake() }
+    Shortcut { sequence: "1"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(0) }
+    Shortcut { sequence: "2"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(1) }
+    Shortcut { sequence: "3"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(2) }
+    Shortcut { sequence: "4"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(3) }
+    Shortcut { sequence: "5"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(4) }
+    Shortcut { sequence: "6"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(5) }
+    Shortcut { sequence: "T"; context: Qt.ApplicationShortcut; onActivated: backend.nextTheme() }
+    Shortcut { sequence: "t"; context: Qt.ApplicationShortcut; onActivated: backend.nextTheme() }
+    Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; onActivated: backend.toggleParticles() }
+    Shortcut { sequence: "p"; context: Qt.ApplicationShortcut; onActivated: backend.toggleParticles() }
+    Shortcut { sequence: "S"; context: Qt.ApplicationShortcut; onActivated: backend.toggleShake() }
+    Shortcut { sequence: "s"; context: Qt.ApplicationShortcut; onActivated: backend.toggleShake() }
     Shortcut {
         sequence: "F"
+        context: Qt.ApplicationShortcut
         onActivated: window.visibility = (window.visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
     }
     Shortcut {
         sequence: "f"
+        context: Qt.ApplicationShortcut
         onActivated: window.visibility = (window.visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
     }
     Shortcut {
         sequence: "F11"
+        context: Qt.ApplicationShortcut
         onActivated: window.visibility = (window.visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
     }
-    Shortcut { sequence: "Escape"; onActivated: Qt.quit() }
-    Shortcut { sequence: "Q"; onActivated: Qt.quit() }
-    Shortcut { sequence: "q"; onActivated: Qt.quit() }
+    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
+    Shortcut { sequence: "Q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
+    Shortcut { sequence: "q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
 
     // Mouse tracking, auto-hide timer & double-tap fullscreen
     Timer {
@@ -138,6 +141,9 @@ ApplicationWindow {
             property var particles: []
             property int maxParticles: 120
             property var trapAmps: null
+            property var smoothed: null
+            property var waveR: null
+            property var waveSpread: null
 
             Component.onCompleted: {
                 var N_pts = 96;
@@ -224,9 +230,12 @@ ApplicationWindow {
                     var N = 96;
                     var halfN = N / 2;
 
-                    // Initialize persistent elastic spring amplitudes
+                    // Initialize persistent elastic spring and wave computation buffers (zero-allocation)
                     if (!visCanvas.trapAmps || visCanvas.trapAmps.length !== N) {
                         visCanvas.trapAmps = new Float32Array(N);
+                        visCanvas.smoothed = new Float32Array(N);
+                        visCanvas.waveR = new Float32Array(N);
+                        visCanvas.waveSpread = new Float32Array(N);
                     }
                     var tAmps = visCanvas.trapAmps;
 
@@ -275,7 +284,7 @@ ApplicationWindow {
                     }
 
                     // 2. Spatial 5-Point Gaussian Smoothing around perimeter for continuous liquid wave
-                    var smoothed = new Float32Array(N);
+                    var smoothed = visCanvas.smoothed;
                     for (var s = 0; s < N; s++) {
                         var p2 = (s - 2 + N) % N;
                         var p1 = (s - 1 + N) % N;
@@ -287,8 +296,8 @@ ApplicationWindow {
                     // 3. Compute Radii with Natural Excursion:
                     var baseOutline = Math.max(8.0, baseRadius * 0.09);
                     var maxExcursion = baseRadius * 1.20;
-                    var waveR = new Float32Array(N);
-                    var waveSpread = new Float32Array(N);
+                    var waveR = visCanvas.waveR;
+                    var waveSpread = visCanvas.waveSpread;
 
                     for (var k = 0; k < N; k++) {
                         var amp = smoothed[k];

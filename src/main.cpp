@@ -9,6 +9,11 @@
 #include "theme.h"
 
 int main(int argc, char *argv[]) {
+    // Lockstep VSync presentation under Wayland to eliminate fullscreen swap jitter
+    if (!qEnvironmentVariableIsSet("QSG_RENDER_LOOP")) {
+        qputenv("QSG_RENDER_LOOP", "basic");
+    }
+
     QGuiApplication app(argc, argv);
     app.setApplicationName("vibez");
     app.setApplicationVersion("1.0.0");
