@@ -108,16 +108,10 @@ ApplicationWindow {
         }
     }
 
-    // Root visualizer scene container with Bass Shake & Zoom Punch applied via GPU
+    // Root visualizer scene container
     Item {
         id: shaker
         anchors.fill: parent
-        scale: backend.shakeEnabled ? backend.shakeScale : 1.0
-        transformOrigin: Item.Center
-        transform: Translate {
-            x: backend.shakeEnabled ? backend.shakeX : 0.0
-            y: backend.shakeEnabled ? backend.shakeY : 0.0
-        }
 
         // Visualizer Canvas (All visualizer drawing)
         Canvas {
@@ -177,6 +171,14 @@ ApplicationWindow {
                 var cy = height / 2;
                 var bars = backend.bars;
                 if (!bars || bars.length === 0) return;
+
+                // Direct Canvas Affine Transform (0ms cost, zero scene-graph FBO quad re-scaling)
+                ctx.save();
+                if (backend.shakeEnabled && (backend.shakeScale !== 1.0 || backend.shakeX !== 0 || backend.shakeY !== 0)) {
+                    ctx.translate(cx + backend.shakeX, cy + backend.shakeY);
+                    ctx.scale(backend.shakeScale, backend.shakeScale);
+                    ctx.translate(-cx, -cy);
+                }
 
                 // -------------------------------------------------------------
                 // 1. Swirling & Dancing Stardust Particles (Batched GPU Draw)
@@ -751,6 +753,8 @@ ApplicationWindow {
                         ctx.fill();
                     }
                 }
+
+                ctx.restore(); // Restore root shake/punch transform
             }
         }
     }

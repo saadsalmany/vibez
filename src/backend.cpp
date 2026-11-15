@@ -179,34 +179,22 @@ void Backend::onCavaOutput() {
 }
 
 void Backend::onDecayTick() {
-    bool changed = false;
-
     if (m_shakeScale > 1.002) {
         m_shakeScale = m_shakeScale * 0.78 + 1.0 * 0.22; // Snappy elastic ease-out
-        changed = true;
     } else if (m_shakeScale != 1.0) {
         m_shakeScale = 1.0;
-        changed = true;
     }
 
     if (std::abs(m_shakeY) > 0.15) {
         m_shakeY *= 0.74; // Snappy recoil damping
-        changed = true;
     } else if (m_shakeY != 0.0) {
         m_shakeY = 0.0;
-        changed = true;
     }
 
     if (std::abs(m_shakeX) > 0.15) {
         m_shakeX *= 0.74;
-        changed = true;
     } else if (m_shakeX != 0.0) {
         m_shakeX = 0.0;
-        changed = true;
-    }
-
-    if (changed) {
-        emit audioUpdated();
     }
 }
 
