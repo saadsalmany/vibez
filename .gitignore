@@ -1,0 +1,24 @@
+# Build output & binaries
+*.o
+*.a
+*.so
+build/
+bin/vibez
+vibez
+
+# Generated Qt meta-object, resources, and UI files
+moc_*
+qrc_*
+ui_*
+*.moc
+moc_predefs.h
+
+# Build system files
+Makefile*
+.qmake.stash
+.qmake.cache
+
+# Logs & temp files
+*.log
+*~
+*.swp

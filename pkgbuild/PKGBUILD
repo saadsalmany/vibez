@@ -1,0 +1,25 @@
+# Maintainer: Saad Salmany <saadsalmanyy@gmail.com>
+pkgname=vibez
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="High-performance audio visualizer for Linux built with Qt 6 and C++"
+arch=('x86_64')
+url="https://github.com/saadsalmany/vibez"
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'cava')
+makedepends=('qt6-tools' 'gcc' 'make')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    mkdir -p build && cd build
+    qmake6 PREFIX=/usr ../vibez.pro
+    make
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver/build"
+    install -Dm755 vibez "$pkgdir/usr/bin/vibez"
+    install -Dm644 ../LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
