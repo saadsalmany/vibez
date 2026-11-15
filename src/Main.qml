@@ -80,8 +80,16 @@ ApplicationWindow {
     // Mouse tracking, auto-hide timer & double-tap fullscreen
     Timer {
         id: hudIdleTimer
-        interval: 2500
-        running: false
+        interval: 2200
+        repeat: false
+        onTriggered: {
+            hudUserVisible = false;
+        }
+    }
+
+    Timer {
+        id: hudLeaveTimer
+        interval: 500
         repeat: false
         onTriggered: {
             if (!hudHover.hovered) {
@@ -94,13 +102,14 @@ ApplicationWindow {
         id: globalMouseTracker
         cursorShape: (window.visibility === Window.FullScreen && !hud.showHud) ? Qt.BlankCursor : Qt.ArrowCursor
         onPointChanged: {
-            // If cursor moves in bottom 140px, surface the HUD
-            if (point.position.y > (window.height - 140)) {
+            if (point.position.y > (window.height - 90)) {
+                hudLeaveTimer.stop();
                 hudUserVisible = true;
                 hudIdleTimer.restart();
             } else if (hudUserVisible) {
-                // Cursor moving elsewhere while HUD is visible keeps it alive for 2.5s
-                hudIdleTimer.restart();
+                if (!hudHover.hovered) {
+                    hudLeaveTimer.restart();
+                }
             }
         }
     }
@@ -771,7 +780,7 @@ ApplicationWindow {
     // Floating Glass HUD (Auto-hides on idle for cinema-grade full screen)
     Rectangle {
         id: hud
-        property bool showHud: hudUserVisible || hudHover.hovered
+        property bool showHud: hudUserVisible
         anchors.bottom: parent.bottom
         anchors.bottomMargin: showHud ? 24 : -80
         anchors.horizontalCenter: parent.horizontalCenter
@@ -789,9 +798,17 @@ ApplicationWindow {
             id: hudHover
             onHoveredChanged: {
                 if (hovered) {
+                    hudLeaveTimer.stop();
                     hudUserVisible = true;
-                    hudIdleTimer.stop();
+                    hudIdleTimer.restart();
                 } else {
+                    hudLeaveTimer.restart();
+                }
+            }
+            onPointChanged: {
+                if (hovered) {
+                    hudLeaveTimer.stop();
+                    hudUserVisible = true;
                     hudIdleTimer.restart();
                 }
             }
