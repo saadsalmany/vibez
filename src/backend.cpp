@@ -2,6 +2,7 @@
 #include <QTextStream>
 #include <QRandomGenerator>
 #include <cmath>
+#include <algorithm>
 
 Backend::Backend(QObject *parent) : QObject(parent) {
     m_bars.resize(64);
@@ -9,6 +10,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         m_bars[i] = 0.0;
     }
 
+    loadSettings();
     startCava();
 
     connect(&m_decayTimer, &QTimer::timeout, this, &Backend::onDecayTick);
@@ -20,6 +22,43 @@ Backend::~Backend() {
         m_cavaProcess.kill();
         m_cavaProcess.waitForFinished(1000);
     }
+}
+
+void Backend::loadSettings() {
+    QSettings s("saadsalmany", "vibez");
+    m_mode = s.value("mode", 1).toInt();
+    m_themeIndex = s.value("themeIndex", 0).toInt();
+    m_bgIndex = s.value("bgIndex", 0).toInt();
+    m_particlesEnabled = s.value("particlesEnabled", true).toBool();
+    m_shakeEnabled = s.value("shakeEnabled", true).toBool();
+    m_customBgImage = s.value("customBgImage", "").toString();
+    m_bgDim = s.value("bgDim", 0.65).toReal();
+    m_particleCount = s.value("particleCount", 100).toInt();
+    m_particleSpeed = s.value("particleSpeed", 1.0).toReal();
+    m_twinkleRatio = s.value("twinkleRatio", 0.40).toReal();
+    m_bassSensitivity = s.value("bassSensitivity", 1.0).toReal();
+    m_beatPunch = s.value("beatPunch", 1.0).toReal();
+    m_discPulse = s.value("discPulse", 1.0).toReal();
+}
+
+void Backend::saveSetting(const QString &key, const QVariant &value) {
+    QSettings s("saadsalmany", "vibez");
+    s.setValue(key, value);
+}
+
+void Backend::resetToDefaults() {
+    setThemeIndex(0);
+    setBgIndex(0);
+    setCustomBgImage("");
+    setBgDim(0.65);
+    setParticleCount(100);
+    setParticleSpeed(1.0);
+    setTwinkleRatio(0.40);
+    setBassSensitivity(1.0);
+    setBeatPunch(1.0);
+    setDiscPulse(1.0);
+    setParticlesEnabled(true);
+    setShakeEnabled(true);
 }
 
 void Backend::startCava() {
@@ -135,12 +174,12 @@ void Backend::onCavaOutput() {
         m_beatCooldown = 6; // ~100ms cooldown for authentic drum hit spacing
 
         if (m_shakeEnabled) {
-            qreal kickStrength = std::clamp((kickVal - 0.28) / 0.55, 0.0, 1.0);
-            // Subtle, cinematic punch (up to 2.8% scale zoom, 4.5px vertical recoil)
-            m_shakeScale = 1.0 + 0.028 * kickStrength;
-            m_shakeY = 4.5 * kickStrength;
+            qreal kickStrength = std::clamp((kickVal - 0.28) / 0.55, 0.0, 1.0) * m_beatPunch;
+            // Cinematic punch scaled by user's beatPunch preference
+            m_shakeScale = 1.0 + 0.032 * kickStrength;
+            m_shakeY = 4.2 * kickStrength;
             m_shakeDir = !m_shakeDir;
-            m_shakeX = (m_shakeDir ? 2.5 : -2.5) * kickStrength;
+            m_shakeX = (m_shakeDir ? 2.0 : -2.0) * kickStrength;
         }
     } else {
         m_isBeatHit = false;
@@ -179,6 +218,7 @@ void Backend::onDecayTick() {
 void Backend::setMode(int m) {
     if (m_mode != m) {
         m_mode = (m % 6 + 6) % 6;
+        saveSetting("mode", m_mode);
         emit modeChanged();
     }
 }
@@ -190,6 +230,7 @@ void Backend::nextMode() {
 void Backend::setThemeIndex(int t) {
     if (m_themeIndex != t) {
         m_themeIndex = (t % 5 + 5) % 5;
+        saveSetting("themeIndex", m_themeIndex);
         emit themeChanged();
     }
 }
@@ -198,9 +239,22 @@ void Backend::nextTheme() {
     setThemeIndex(m_themeIndex + 1);
 }
 
+void Backend::setBgIndex(int b) {
+    if (m_bgIndex != b) {
+        m_bgIndex = (b % 7 + 7) % 7;
+        saveSetting("bgIndex", m_bgIndex);
+        emit bgIndexChanged();
+    }
+}
+
+void Backend::nextBackground() {
+    setBgIndex(m_bgIndex + 1);
+}
+
 void Backend::setParticlesEnabled(bool enabled) {
     if (m_particlesEnabled != enabled) {
         m_particlesEnabled = enabled;
+        saveSetting("particlesEnabled", m_particlesEnabled);
         emit particlesChanged();
     }
 }
@@ -217,6 +271,7 @@ void Backend::setShakeEnabled(bool enabled) {
             m_shakeX = 0.0;
             m_shakeY = 0.0;
         }
+        saveSetting("shakeEnabled", m_shakeEnabled);
         emit shakeChanged();
         emit audioUpdated();
     }
@@ -224,4 +279,76 @@ void Backend::setShakeEnabled(bool enabled) {
 
 void Backend::toggleShake() {
     setShakeEnabled(!m_shakeEnabled);
+}
+
+// Customizer Setters
+void Backend::setCustomBgImage(const QString &path) {
+    if (m_customBgImage != path) {
+        m_customBgImage = path;
+        saveSetting("customBgImage", m_customBgImage);
+        emit customBgImageChanged();
+    }
+}
+
+void Backend::setBgDim(qreal dim) {
+    dim = std::clamp(dim, 0.0, 1.0);
+    if (m_bgDim != dim) {
+        m_bgDim = dim;
+        saveSetting("bgDim", m_bgDim);
+        emit bgDimChanged();
+    }
+}
+
+void Backend::setParticleCount(int count) {
+    count = std::clamp(count, 10, 300);
+    if (m_particleCount != count) {
+        m_particleCount = count;
+        saveSetting("particleCount", m_particleCount);
+        emit particleCountChanged();
+    }
+}
+
+void Backend::setParticleSpeed(qreal speed) {
+    speed = std::clamp(speed, 0.2, 3.5);
+    if (m_particleSpeed != speed) {
+        m_particleSpeed = speed;
+        saveSetting("particleSpeed", m_particleSpeed);
+        emit particleSpeedChanged();
+    }
+}
+
+void Backend::setTwinkleRatio(qreal ratio) {
+    ratio = std::clamp(ratio, 0.0, 1.0);
+    if (m_twinkleRatio != ratio) {
+        m_twinkleRatio = ratio;
+        saveSetting("twinkleRatio", m_twinkleRatio);
+        emit twinkleRatioChanged();
+    }
+}
+
+void Backend::setBassSensitivity(qreal sens) {
+    sens = std::clamp(sens, 0.3, 3.0);
+    if (m_bassSensitivity != sens) {
+        m_bassSensitivity = sens;
+        saveSetting("bassSensitivity", m_bassSensitivity);
+        emit bassSensitivityChanged();
+    }
+}
+
+void Backend::setBeatPunch(qreal punch) {
+    punch = std::clamp(punch, 0.0, 3.0);
+    if (m_beatPunch != punch) {
+        m_beatPunch = punch;
+        saveSetting("beatPunch", m_beatPunch);
+        emit beatPunchChanged();
+    }
+}
+
+void Backend::setDiscPulse(qreal pulse) {
+    pulse = std::clamp(pulse, 0.0, 3.0);
+    if (m_discPulse != pulse) {
+        m_discPulse = pulse;
+        saveSetting("discPulse", m_discPulse);
+        emit discPulseChanged();
+    }
 }

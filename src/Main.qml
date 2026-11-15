@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Window
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: window
@@ -14,7 +15,7 @@ ApplicationWindow {
     color: "#08090D"
 
     Material.theme: Material.Dark
-    Material.accent: theme.accent
+    Material.accent: curTheme.c1
 
     // Helper for rounded rectangles in QtQuick Context2D
     function drawRoundRect(ctx, x, y, w, h, r) {
@@ -39,11 +40,28 @@ ApplicationWindow {
     ]
     readonly property var curTheme: themes[backend.themeIndex % themes.length]
 
+    // Background presets
+    readonly property var bgPresets: [
+        { name: "Void Charcoal", c1: "#0b0d14", c2: "#040508" },
+        { name: "Deep Space", c1: "#0a0d24", c2: "#03040c" },
+        { name: "Cyber City", c1: "#0b1526", c2: "#040810" },
+        { name: "Dark Ruby", c1: "#1d0812", c2: "#070205" },
+        { name: "Emerald Abyss", c1: "#051813", c2: "#020705" },
+        { name: "Midnight Neon", c1: "#150a22", c2: "#050209" },
+        { name: "Pitch Void", c1: "#000000", c2: "#000000" }
+    ]
+    readonly property var curBgPreset: bgPresets[backend.bgIndex % bgPresets.length]
+
     // HUD visibility & Cinema Fullscreen mode
     property bool hudUserVisible: false
+    property bool studioOpen: false
 
     Shortcut { sequence: "H"; context: Qt.ApplicationShortcut; onActivated: { hudUserVisible = !hudUserVisible; if (hudUserVisible) hudIdleTimer.restart(); } }
     Shortcut { sequence: "h"; context: Qt.ApplicationShortcut; onActivated: { hudUserVisible = !hudUserVisible; if (hudUserVisible) hudIdleTimer.restart(); } }
+    Shortcut { sequence: "C"; context: Qt.ApplicationShortcut; onActivated: studioOpen = !studioOpen }
+    Shortcut { sequence: "c"; context: Qt.ApplicationShortcut; onActivated: studioOpen = !studioOpen }
+    Shortcut { sequence: "B"; context: Qt.ApplicationShortcut; onActivated: backend.nextBackground() }
+    Shortcut { sequence: "b"; context: Qt.ApplicationShortcut; onActivated: backend.nextBackground() }
 
     // Keyboard Shortcuts
     Shortcut { sequence: "1"; context: Qt.ApplicationShortcut; onActivated: backend.setMode(0) }
@@ -73,9 +91,29 @@ ApplicationWindow {
         context: Qt.ApplicationShortcut
         onActivated: window.visibility = (window.visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
     }
-    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (studioOpen) {
+                studioOpen = false;
+            } else {
+                Qt.quit();
+            }
+        }
+    }
     Shortcut { sequence: "Q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
     Shortcut { sequence: "q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
+
+    // File Dialog for picking custom background wallpaper
+    FileDialog {
+        id: bgFileDialog
+        title: "Choose Visualizer Background Wallpaper"
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp)"]
+        onAccepted: {
+            backend.setCustomBgImage(selectedFile)
+        }
+    }
 
     // Mouse tracking, auto-hide timer & double-tap fullscreen
     Timer {
@@ -100,7 +138,7 @@ ApplicationWindow {
 
     HoverHandler {
         id: globalMouseTracker
-        cursorShape: (window.visibility === Window.FullScreen && !hud.showHud) ? Qt.BlankCursor : Qt.ArrowCursor
+        cursorShape: (window.visibility === Window.FullScreen && !hud.showHud && !studioOpen) ? Qt.BlankCursor : Qt.ArrowCursor
         onPointChanged: {
             if (point.position.y > (window.height - 90)) {
                 hudLeaveTimer.stop();
@@ -125,6 +163,35 @@ ApplicationWindow {
         id: shaker
         anchors.fill: parent
 
+        // -------------------------------------------------------------
+        // Background Layers (Presets, Custom Wallpaper & Dimming Overlay)
+        // -------------------------------------------------------------
+        Rectangle {
+            id: bgPresetRect
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: curBgPreset.c1 }
+                GradientStop { position: 1.0; color: curBgPreset.c2 }
+            }
+        }
+
+        Image {
+            id: customWallpaper
+            anchors.fill: parent
+            source: backend.customBgImage
+            fillMode: Image.PreserveAspectCrop
+            visible: backend.customBgImage.length > 0
+            asynchronous: true
+            cache: true
+        }
+
+        Rectangle {
+            id: dimOverlay
+            anchors.fill: parent
+            color: "#000000"
+            opacity: backend.bgDim
+        }
+
         // Visualizer Canvas (All visualizer drawing)
         Canvas {
             id: visCanvas
@@ -148,12 +215,34 @@ ApplicationWindow {
 
             // Radial Particles System (Dynamic Swirling Beat-Reactive Stardust)
             property var particles: []
-            property int maxParticles: 120
             property var trapAmps: null
             property var smoothed: null
             property var waveR: null
             property var waveSpread: null
             property var shockwaves: []
+
+            function rebuildParticles() {
+                var count = backend.particleCount;
+                var twRatio = backend.twinkleRatio;
+                var cx = width > 0 ? width / 2 : 640;
+                var cy = height > 0 ? height / 2 : 360;
+                var maxR = Math.max(cx, cy) * 1.25;
+                var newP = [];
+                for (var i = 0; i < count; i++) {
+                    var isTwinkle = (Math.random() < twRatio);
+                    newP.push({
+                        angle: Math.random() * Math.PI * 2,
+                        rad: 130 + Math.random() * maxR,
+                        speed: Math.random() * 1.5 + 0.8,
+                        spin: (Math.random() - 0.5) * 0.016,
+                        size: isTwinkle ? (Math.random() * 2.5 + 1.8) : (Math.random() * 1.8 + 0.8),
+                        twinkle: isTwinkle,
+                        phase: Math.random() * Math.PI * 2,
+                        alpha: Math.random() * 0.5 + 0.5
+                    });
+                }
+                particles = newP;
+            }
 
             Component.onCompleted: {
                 var N_pts = 96;
@@ -162,21 +251,13 @@ ApplicationWindow {
                     cosTable.push(Math.cos(ang));
                     sinTable.push(Math.sin(ang));
                 }
+                rebuildParticles();
+            }
 
-                var cx = width > 0 ? width / 2 : 640;
-                var cy = height > 0 ? height / 2 : 360;
-                var maxR = Math.max(cx, cy) * 1.25;
-
-                for (var i = 0; i < maxParticles; i++) {
-                    particles.push({
-                        angle: Math.random() * Math.PI * 2,
-                        rad: 130 + Math.random() * maxR,
-                        speed: Math.random() * 1.5 + 0.8,
-                        spin: (Math.random() - 0.5) * 0.016,
-                        size: Math.random() * 2.0 + 1.0,
-                        alpha: Math.random() * 0.5 + 0.5
-                    });
-                }
+            Connections {
+                target: backend
+                function onParticleCountChanged() { visCanvas.rebuildParticles() }
+                function onTwinkleRatioChanged() { visCanvas.rebuildParticles() }
             }
 
             onPaint: {
@@ -202,14 +283,15 @@ ApplicationWindow {
                 if (backend.particlesEnabled) {
                     var maxDist = Math.max(width, height) * 0.85;
                     var bassFactor = backend.bass;
-                    var speedMult = 1.0 + bassFactor * 1.6;
-                    var beatKick = backend.isBeatHit ? (2.5 + bassFactor * 4.0) : 0;
+                    var speedMult = (1.0 + bassFactor * 1.6) * backend.particleSpeed;
+                    var beatKick = backend.isBeatHit ? ((2.5 + bassFactor * 4.0) * backend.particleSpeed) : 0;
 
                     ctx.beginPath();
                     for (var pIdx = 0; pIdx < particles.length; pIdx++) {
                         var p = particles[pIdx];
                         p.rad += p.speed * speedMult + beatKick;
                         p.angle += p.spin * (1.0 + bassFactor * 1.5);
+                        p.phase = (p.phase || 0) + 0.08;
 
                         if (p.rad > maxDist) {
                             p.rad = 130 + Math.random() * 50;
@@ -219,6 +301,11 @@ ApplicationWindow {
                         var px = cx + Math.cos(p.angle) * p.rad;
                         var py = cy + Math.sin(p.angle) * p.rad;
                         var pSize = p.size * (1.0 + bassFactor * 0.35);
+
+                        if (p.twinkle) {
+                            var tw = 0.5 + 0.5 * Math.sin(p.phase);
+                            pSize *= (0.7 + tw * 0.7);
+                        }
 
                         ctx.moveTo(px + pSize, py);
                         ctx.arc(px, py, pSize, 0, Math.PI * 2);
@@ -235,7 +322,7 @@ ApplicationWindow {
                     ctx.globalAlpha = 1.0; // Reset full opacity (essential for crisp solid rendering)
                     var minDim = Math.min(width, height);
                     // Responsive subwoofer disc radius: scales with screen, pulses organically with bass notes
-                    var baseRadius = minDim * 0.22 * (1.0 + backend.bass * 0.065);
+                    var baseRadius = minDim * 0.22 * (1.0 + backend.bass * 0.065 * backend.discPulse);
                     var baseOutline = Math.max(6.0, baseRadius * 0.08); // sleek circular ring during calm parts
                     var N = 96;
                     var halfN = N / 2;
@@ -251,7 +338,6 @@ ApplicationWindow {
 
                     // 1. Natural Organic Frequency Spectrum Sculpting (Authentic Audio Response)
                     // Sample the 64 real audio frequency bars symmetrically from top (12 o'clock) down to bottom (6 o'clock)
-                    // Sub-bass & 808s flare the upper crests; mids/vocals sculpt the sides; treble ripples the base
                     var numBars = bars.length;
 
                     for (var i = 0; i < N; i++) {
@@ -289,7 +375,7 @@ ApplicationWindow {
                     }
 
                     // 3. Compute Radii with Natural Excursion:
-                    var maxExcursion = baseRadius * 1.0;
+                    var maxExcursion = baseRadius * 1.0 * backend.bassSensitivity;
                     var waveR = visCanvas.waveR;
                     var waveSpread = visCanvas.waveSpread;
 
@@ -328,7 +414,7 @@ ApplicationWindow {
                     }
 
                     // 4. Stroke Giant Radiant Chromatic Layers (Electric Neon Behind the Horns)
-                    var bassEnergy = backend.bass;
+                    var bassEnergy = backend.bass * backend.bassSensitivity;
 
                     // Layer 5: Electric Cyan / Sky Blue Aura
                     traceSplineFactor(1.0);
@@ -365,7 +451,7 @@ ApplicationWindow {
                     ctx.fillStyle = "#FFFFFF";
                     ctx.fill();
 
-                    // 4. Central Subwoofer Disc with Audio-Reactive Equalizer Skyline & Unified Emblem
+                    // 6. Central Subwoofer Disc with Audio-Reactive Equalizer Skyline & Unified Emblem
                     var staticRadius = minDim * 0.22;
                     var scaleFactor = baseRadius / staticRadius;
 
@@ -399,7 +485,7 @@ ApplicationWindow {
                         var bItem = blds[bi];
                         var bx = bItem.dx * staticRadius * 2.0;
                         var bw = bItem.w * staticRadius * 2.0;
-                        var barAmp = bars[bItem.barIdx] || 0.0;
+                        var barAmp = (bars[bItem.barIdx] || 0.0) * backend.bassSensitivity;
                         // Architectural base height + live dynamic frequency bounce
                         var bh = (bItem.baseH * 0.55 + barAmp * 0.45 * (bItem.baseH * 1.5)) * staticRadius;
                         ctx.fillRect(bx, skyBaseY - bh, bw, bh + 20);
@@ -435,7 +521,7 @@ ApplicationWindow {
                 // MODE 2: NEON TRAP CIRCLE (Dual-Color Gradient Spectrum)
                 // ==============================================================
                 else if (backend.mode === 2) {
-                    var baseRadius2 = 110 + backend.bass * 20;
+                    var baseRadius2 = 110 + backend.bass * 20 * backend.discPulse;
                     var totalBars2 = 64;
                     var halfBars2 = totalBars2 / 2;
 
@@ -470,7 +556,7 @@ ApplicationWindow {
                                                       : Math.floor((totalBars2 - i2) * (bars.length / halfBars2));
                         barIdx2 = Math.max(0, Math.min(bars.length - 1, barIdx2));
 
-                        var val2 = bars[barIdx2] || 0.0;
+                        var val2 = (bars[barIdx2] || 0.0) * backend.bassSensitivity;
                         var barLen2 = val2 * 115 + 3;
 
                         var bx1 = cx + Math.cos(angle2) * baseRadius2;
@@ -483,7 +569,7 @@ ApplicationWindow {
                         grad2.addColorStop(1, curTheme.c2);
 
                         ctx.strokeStyle = grad2;
-                        ctx.globalAlpha = 0.85 + val2 * 0.15;
+                        ctx.globalAlpha = 0.85 + Math.min(0.15, val2 * 0.15);
                         ctx.beginPath();
                         ctx.moveTo(bx1, by1);
                         ctx.lineTo(bx2, by2);
@@ -543,8 +629,8 @@ ApplicationWindow {
                     var baseY = height - 120;
 
                     for (var b = 0; b < totalBars; b++) {
-                        var val = bars[b] || 0.0;
-                        var barH = val * maxBarHeight + 4;
+                        var val = (bars[b] || 0.0) * backend.bassSensitivity;
+                        var barH = Math.min(height * 0.70, val * maxBarHeight + 4);
                         var bx = margin + b * (barWidth + barGap);
                         var by = baseY - barH;
 
@@ -555,7 +641,7 @@ ApplicationWindow {
                         barGrad.addColorStop(1, "#FFFFFF");
 
                         ctx.fillStyle = barGrad;
-                        ctx.globalAlpha = 0.85 + val * 0.15;
+                        ctx.globalAlpha = 0.85 + Math.min(0.15, val * 0.15);
                         drawRoundRect(ctx, bx, by, barWidth, barH, barWidth / 2);
                         ctx.fill();
 
@@ -581,7 +667,7 @@ ApplicationWindow {
                     waveGrad.addColorStop(1, curTheme.c1);
 
                     ctx.strokeStyle = waveGrad;
-                    ctx.lineWidth = 3.5 + backend.bass * 2.0;
+                    ctx.lineWidth = 3.5 + backend.bass * 2.0 * backend.discPulse;
                     ctx.globalAlpha = 0.9;
                     ctx.beginPath();
 
@@ -590,7 +676,7 @@ ApplicationWindow {
 
                     for (var w = 0; w < bars.length; w++) {
                         var normX = w * step;
-                        var waveAmp = (bars[w] || 0.0) * (height * 0.26);
+                        var waveAmp = (bars[w] || 0.0) * (height * 0.26) * backend.bassSensitivity;
                         var waveY = cy - waveAmp * Math.sin((w / bars.length) * Math.PI);
                         ctx.lineTo(normX, waveY);
                     }
@@ -603,7 +689,7 @@ ApplicationWindow {
                     ctx.moveTo(0, cy);
                     for (var w2 = 0; w2 < bars.length; w2++) {
                         var normX2 = w2 * step;
-                        var waveAmp2 = (bars[w2] || 0.0) * (height * 0.16);
+                        var waveAmp2 = (bars[w2] || 0.0) * (height * 0.16) * backend.bassSensitivity;
                         var waveY2 = cy + waveAmp2 * Math.sin((w2 / bars.length) * Math.PI);
                         ctx.lineTo(normX2, waveY2);
                     }
@@ -617,7 +703,7 @@ ApplicationWindow {
                     var horizonY = height * 0.50;
 
                     // 1. Retro Synthwave Sun on Horizon (Clean sunset setting into the grid)
-                    var sunRadius = 100 + backend.bass * 16;
+                    var sunRadius = (100 + backend.bass * 16 * backend.discPulse);
                     var sunY = horizonY - sunRadius * 0.40;
 
                     ctx.save();
@@ -672,7 +758,7 @@ ApplicationWindow {
                     for (var hx = 0; hx <= numHorizPts * 2; hx++) {
                         var bIdx = (hx <= numHorizPts) ? (numHorizPts - hx) : (hx - numHorizPts);
                         bIdx = Math.min(bars.length - 1, Math.max(0, bIdx));
-                        var barAmp = (bars[bIdx] || 0.0) * (30.0 + backend.bass * 20.0);
+                        var barAmp = (bars[bIdx] || 0.0) * (30.0 + backend.bass * 20.0) * backend.bassSensitivity;
                         var px = hx * stepX;
                         // Subtly taper off wave amplitude near center so it doesn't obscure the sun
                         var distFromCenter = Math.abs(px - cx);
@@ -724,7 +810,7 @@ ApplicationWindow {
                 // MODE 5: 3D SINGULARITY (Interstellar Black Hole & Accretion Disc)
                 // ==============================================================
                 else if (backend.mode === 5) {
-                    var holeRadius = (80 + backend.bass * 16);
+                    var holeRadius = (80 + backend.bass * 16 * backend.discPulse);
                     var tiltS = 0.40;
                     var points = 64;
 
@@ -734,7 +820,7 @@ ApplicationWindow {
                         for (var sp = 0; sp <= points; sp++) {
                             var spAngle = (sp / points) * Math.PI * 2 + visCanvas.singularityRot * (pass === 0 ? 1 : -1);
                             var spIdx = sp % (bars.length / 2);
-                            var spVal = bars[spIdx] || 0.0;
+                            var spVal = (bars[spIdx] || 0.0) * backend.bassSensitivity;
                             var rDisc = holeRadius + 24 + spVal * 80 + (pass * 20);
                             var sx = cx + Math.cos(spAngle) * rDisc;
                             var sy = cy + Math.sin(spAngle) * rDisc * tiltS;
@@ -776,10 +862,12 @@ ApplicationWindow {
         }
     }
 
+    // -------------------------------------------------------------
     // Floating Glass HUD (Auto-hides on idle for cinema-grade full screen)
+    // -------------------------------------------------------------
     Rectangle {
         id: hud
-        property bool showHud: hudUserVisible
+        property bool showHud: window.hudUserVisible
         anchors.bottom: parent.bottom
         anchors.bottomMargin: showHud ? 24 : -80
         anchors.horizontalCenter: parent.horizontalCenter
@@ -798,7 +886,7 @@ ApplicationWindow {
             onHoveredChanged: {
                 if (hovered) {
                     hudLeaveTimer.stop();
-                    hudUserVisible = true;
+                    window.hudUserVisible = true;
                     hudIdleTimer.restart();
                 } else {
                     hudLeaveTimer.restart();
@@ -807,7 +895,7 @@ ApplicationWindow {
             onPointChanged: {
                 if (hovered) {
                     hudLeaveTimer.stop();
-                    hudUserVisible = true;
+                    window.hudUserVisible = true;
                     hudIdleTimer.restart();
                 }
             }
@@ -861,7 +949,7 @@ ApplicationWindow {
             Rectangle { width: 1; height: 24; color: "#FFFFFF20"; anchors.verticalCenter: parent.verticalCenter }
 
             Button {
-                text: "🎨 " + curTheme.name
+                text: "🎨 " + window.curTheme.name
                 flat: true
                 onClicked: backend.nextTheme()
             }
@@ -872,10 +960,449 @@ ApplicationWindow {
                 onClicked: backend.toggleParticles()
             }
             Button {
-                text: backend.shakeEnabled ? "⚡ Shake" : "🚫 Shake"
+                text: backend.shakeEnabled ? "⚡ Recoil" : "🚫 Recoil"
                 flat: true
                 highlighted: backend.shakeEnabled
                 onClicked: backend.toggleShake()
+            }
+
+            Rectangle { width: 1; height: 24; color: "#FFFFFF20"; anchors.verticalCenter: parent.verticalCenter }
+
+            Button {
+                text: "⚙️ Studio"
+                flat: true
+                highlighted: window.studioOpen
+                onClicked: window.studioOpen = !window.studioOpen
+            }
+        }
+    }
+
+    // -------------------------------------------------------------
+    // Avee Player Live Customization Studio Drawer
+    // -------------------------------------------------------------
+    // Backdrop Scrim to close studio when tapped outside
+    Rectangle {
+        id: studioScrim
+        anchors.fill: parent
+        color: "#000000"
+        opacity: window.studioOpen ? 0.40 : 0.0
+        visible: opacity > 0.01
+        z: 90
+        Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+        TapHandler {
+            onTapped: window.studioOpen = false
+        }
+    }
+
+    // Studio Side Drawer
+    Rectangle {
+        id: studioDrawer
+        width: Math.min(380, parent.width * 0.90)
+        height: parent.height
+        x: window.studioOpen ? (parent.width - width) : parent.width
+        y: 0
+        z: 100
+        color: "#12141FEE"
+        border.color: "#FFFFFF18"
+        border.width: 1
+
+        Behavior on x { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+
+        // Block mouse click-through to visualizer
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            preventStealing: true
+            onWheel: function(wheel) { wheel.accepted = true; }
+        }
+
+        // Drawer Header
+        Item {
+            id: studioHeader
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 64
+
+            Row {
+                anchors.left: parent.left
+                anchors.leftMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 12
+
+                Text {
+                    text: "⚙️"
+                    font.pixelSize: 22
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text {
+                        text: "Studio Customizer"
+                        font.pixelSize: 17
+                        font.bold: true
+                        color: "#FFFFFF"
+                    }
+                    Text {
+                        text: "Live Audio & Visual Dynamics"
+                        font.pixelSize: 11
+                        color: "#8E9AA8"
+                    }
+                }
+            }
+
+            // Close button
+            Button {
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                text: "✕"
+                flat: true
+                onClicked: window.studioOpen = false
+            }
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1
+                color: "#FFFFFF15"
+            }
+        }
+
+        // Scrollable Settings Content
+        Flickable {
+            id: studioFlickable
+            anchors.top: studioHeader.bottom
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            contentHeight: settingsCol.height + 40
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.vertical: ScrollBar {
+                active: true
+                policy: ScrollBar.AsNeeded
+            }
+
+            Column {
+                id: settingsCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.top: parent.top
+                anchors.topMargin: 16
+                spacing: 16
+
+                // CARD 1: Background & Wallpaper
+                Rectangle {
+                    width: parent.width
+                    height: bgCardCol.height + 24
+                    radius: 12
+                    color: "#181B2B"
+                    border.color: "#FFFFFF12"
+                    border.width: 1
+
+                    Column {
+                        id: bgCardCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 14
+                        spacing: 10
+
+                        Text {
+                            text: "🖼️ Background & Wallpaper"
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: "#E2E8F0"
+                        }
+
+                        Row {
+                            spacing: 8
+                            Button {
+                                text: "📂 Choose Wallpaper"
+                                flat: true
+                                highlighted: true
+                                onClicked: bgFileDialog.open()
+                            }
+                            Button {
+                                text: "✕ Clear"
+                                flat: true
+                                enabled: backend.customBgImage.length > 0
+                                onClicked: backend.setCustomBgImage("")
+                            }
+                        }
+
+                        Text {
+                            text: backend.customBgImage.length > 0 ? ("Image: " + backend.customBgImage.split('/').pop()) : ("Preset: " + window.curBgPreset.name)
+                            font.pixelSize: 11
+                            color: "#8FA0B5"
+                            elide: Text.ElideMiddle
+                            width: parent.width
+                        }
+
+                        Row {
+                            spacing: 6
+                            Button {
+                                text: "🎨 Cycle Preset: " + window.curBgPreset.name
+                                flat: true
+                                onClicked: backend.nextBackground()
+                            }
+                        }
+
+                        // Dimming Slider
+                        Text {
+                            text: "Background Dim: " + Math.round(backend.bgDim * 100) + "%"
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 0.0
+                            to: 1.0
+                            value: backend.bgDim
+                            onMoved: backend.setBgDim(value)
+                        }
+                    }
+                }
+
+                // CARD 2: Color Aura Theme
+                Rectangle {
+                    width: parent.width
+                    height: themeCardCol.height + 24
+                    radius: 12
+                    color: "#181B2B"
+                    border.color: "#FFFFFF12"
+                    border.width: 1
+
+                    Column {
+                        id: themeCardCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 14
+                        spacing: 10
+
+                        Text {
+                            text: "🎨 Color Aura Theme"
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: "#E2E8F0"
+                        }
+
+                        Grid {
+                            columns: 2
+                            spacing: 6
+                            width: parent.width
+
+                            Repeater {
+                                model: window.themes
+                                delegate: Button {
+                                    width: (themeCardCol.width - 6) / 2
+                                    text: modelData.name
+                                    highlighted: backend.themeIndex === index
+                                    flat: true
+                                    onClicked: backend.setThemeIndex(index)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // CARD 3: Particles & Twinkle
+                Rectangle {
+                    width: parent.width
+                    height: partCardCol.height + 24
+                    radius: 12
+                    color: "#181B2B"
+                    border.color: "#FFFFFF12"
+                    border.width: 1
+
+                    Column {
+                        id: partCardCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 14
+                        spacing: 10
+
+                        Text {
+                            text: "✨ Stardust & Twinkle Particles"
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: "#E2E8F0"
+                        }
+
+                        Button {
+                            text: backend.particlesEnabled ? "✨ Particles: Enabled" : "🚫 Particles: Disabled"
+                            highlighted: backend.particlesEnabled
+                            flat: true
+                            onClicked: backend.toggleParticles()
+                        }
+
+                        // Particle Count Slider
+                        Text {
+                            text: "Density / Particle Count: " + backend.particleCount
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 20
+                            to: 280
+                            stepSize: 5
+                            value: backend.particleCount
+                            onMoved: backend.setParticleCount(Math.round(value))
+                        }
+
+                        // Twinkle Star Ratio Slider
+                        Text {
+                            text: "Twinkle Star Ratio: " + Math.round(backend.twinkleRatio * 100) + "%"
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 0.0
+                            to: 1.0
+                            value: backend.twinkleRatio
+                            onMoved: backend.setTwinkleRatio(value)
+                        }
+
+                        // Fly Speed Slider
+                        Text {
+                            text: "Particle Fly Speed: " + backend.particleSpeed.toFixed(2) + "x"
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 0.2
+                            to: 2.5
+                            value: backend.particleSpeed
+                            onMoved: backend.setParticleSpeed(value)
+                        }
+                    }
+                }
+
+                // CARD 4: Bass & Beat Dynamics
+                Rectangle {
+                    width: parent.width
+                    height: dynCardCol.height + 24
+                    radius: 12
+                    color: "#181B2B"
+                    border.color: "#FFFFFF12"
+                    border.width: 1
+
+                    Column {
+                        id: dynCardCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 14
+                        spacing: 10
+
+                        Text {
+                            text: "🔊 Bass & Beat Dynamics"
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: "#E2E8F0"
+                        }
+
+                        // Horn Excursion
+                        Text {
+                            text: "Horn Excursion (Bass Sens.): " + backend.bassSensitivity.toFixed(2) + "x"
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 0.4
+                            to: 2.2
+                            value: backend.bassSensitivity
+                            onMoved: backend.setBassSensitivity(value)
+                        }
+
+                        // Subwoofer Disc Pulse
+                        Text {
+                            text: "Subwoofer Disc Pulse: " + backend.discPulse.toFixed(2) + "x"
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 0.0
+                            to: 2.0
+                            value: backend.discPulse
+                            onMoved: backend.setDiscPulse(value)
+                        }
+
+                        // Beat Punch / Shake
+                        Button {
+                            text: backend.shakeEnabled ? "⚡ Beat Recoil: Enabled" : "🚫 Beat Recoil: Disabled"
+                            highlighted: backend.shakeEnabled
+                            flat: true
+                            onClicked: backend.toggleShake()
+                        }
+
+                        Text {
+                            text: "Kick Punch Multiplier: " + backend.beatPunch.toFixed(2) + "x"
+                            font.pixelSize: 12
+                            color: "#CBD5E1"
+                        }
+                        Slider {
+                            width: parent.width
+                            from: 0.0
+                            to: 2.0
+                            value: backend.beatPunch
+                            onMoved: backend.setBeatPunch(value)
+                        }
+                    }
+                }
+
+                // CARD 5: Reset & Shortcuts Guide
+                Rectangle {
+                    width: parent.width
+                    height: resetCardCol.height + 24
+                    radius: 12
+                    color: "#181B2B"
+                    border.color: "#FFFFFF12"
+                    border.width: 1
+
+                    Column {
+                        id: resetCardCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 14
+                        spacing: 10
+
+                        Text {
+                            text: "🔄 Presets & Quick Shortcuts"
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: "#E2E8F0"
+                        }
+
+                        Button {
+                            width: parent.width
+                            text: "🔄 Reset to Factory Defaults"
+                            flat: true
+                            highlighted: true
+                            onClicked: backend.resetToDefaults()
+                        }
+
+                        Text {
+                            text: "Hotkeys:\n• C / c: Open/Close Studio\n• B / b: Cycle Background\n• T / t: Cycle Aura Theme\n• H / h: Toggle Bottom HUD\n• 1-6: Switch Visualizer Mode\n• F / F11: Fullscreen Cinema"
+                            font.pixelSize: 11
+                            color: "#7E8E9F"
+                            lineHeight: 1.3
+                        }
+                    }
+                }
             }
         }
     }
