@@ -153,6 +153,7 @@ ApplicationWindow {
             property var smoothed: null
             property var waveR: null
             property var waveSpread: null
+            property var shockwaves: []
 
             Component.onCompleted: {
                 var N_pts = 96;
@@ -444,6 +445,11 @@ ApplicationWindow {
                     var baseRadius2 = 115 + backend.bass * 38;
                     var totalBars2 = 64;
                     var halfBars2 = totalBars2 / 2;
+
+                    var shockwaves = visCanvas.shockwaves;
+                    if (backend.isBeatHit && shockwaves.length < 5) {
+                        shockwaves.push({ r: baseRadius2, alpha: 1.0 });
+                    }
 
                     // Expanding Bass Shockwaves
                     for (var s2 = shockwaves.length - 1; s2 >= 0; s2--) {
