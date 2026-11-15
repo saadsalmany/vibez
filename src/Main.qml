@@ -365,59 +365,68 @@ ApplicationWindow {
                     ctx.fillStyle = "#FFFFFF";
                     ctx.fill();
 
-                    // 4. Central Subwoofer Disc with Custom "Salmany Nation" Emblem & City Skyline (Exactly matching Trap Nation)
+                    // 4. Central Subwoofer Disc with Audio-Reactive Equalizer Skyline & Unified Emblem
+                    var staticRadius = minDim * 0.22;
+                    var scaleFactor = baseRadius / staticRadius;
+
                     ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.scale(scaleFactor, scaleFactor);
+
                     ctx.beginPath();
-                    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
+                    ctx.arc(0, 0, staticRadius, 0, Math.PI * 2);
                     ctx.fillStyle = "#08090D"; // Solid pitch black central subwoofer disc
                     ctx.fill();
                     ctx.clip(); // Clip all contents inside the circular disc
 
-                    // City Skyline Silhouette in crisp white at the bottom of the disc
+                    // Audio-Reactive Skyline Silhouette: buildings dance to real spectrum frequencies
                     ctx.fillStyle = "#FFFFFF";
-                    var skyBaseY = cy + baseRadius * 0.98;
+                    var skyBaseY = staticRadius * 0.98;
                     var blds = [
-                        { dx: -0.42, w: 0.07, h: 0.24 },
-                        { dx: -0.34, w: 0.08, h: 0.36 },
-                        { dx: -0.25, w: 0.07, h: 0.48 },
-                        { dx: -0.17, w: 0.06, h: 0.30 },
-                        { dx: -0.10, w: 0.08, h: 0.58 }, // tall spire
-                        { dx: -0.01, w: 0.07, h: 0.40 },
-                        { dx:  0.07, w: 0.08, h: 0.52 },
-                        { dx:  0.16, w: 0.07, h: 0.34 },
-                        { dx:  0.24, w: 0.08, h: 0.46 },
-                        { dx:  0.33, w: 0.08, h: 0.22 }
+                        { dx: -0.42, w: 0.07, baseH: 0.24, barIdx: 2 },
+                        { dx: -0.34, w: 0.08, baseH: 0.36, barIdx: 5 },
+                        { dx: -0.25, w: 0.07, baseH: 0.48, barIdx: 8 },
+                        { dx: -0.17, w: 0.06, baseH: 0.30, barIdx: 12 },
+                        { dx: -0.10, w: 0.08, baseH: 0.58, barIdx: 17 }, // tall spire
+                        { dx: -0.01, w: 0.07, baseH: 0.40, barIdx: 22 },
+                        { dx:  0.07, w: 0.08, baseH: 0.52, barIdx: 28 },
+                        { dx:  0.16, w: 0.07, baseH: 0.34, barIdx: 34 },
+                        { dx:  0.24, w: 0.08, baseH: 0.46, barIdx: 40 },
+                        { dx:  0.33, w: 0.08, baseH: 0.22, barIdx: 48 }
                     ];
+
                     for (var bi = 0; bi < blds.length; bi++) {
                         var bItem = blds[bi];
-                        var bx = cx + bItem.dx * baseRadius * 2.0;
-                        var bw = bItem.w * baseRadius * 2.0;
-                        var bh = bItem.h * baseRadius;
+                        var bx = bItem.dx * staticRadius * 2.0;
+                        var bw = bItem.w * staticRadius * 2.0;
+                        var barAmp = bars[bItem.barIdx] || 0.0;
+                        // Architectural base height + live dynamic frequency bounce
+                        var bh = (bItem.baseH * 0.55 + barAmp * 0.45 * (bItem.baseH * 1.5)) * staticRadius;
                         ctx.fillRect(bx, skyBaseY - bh, bw, bh + 20);
                     }
 
-                    // Stylized Typography: "Salmany Nation" in bold crisp white
+                    // Stylized Typography: "Salmany Nation" (scaled cohesively with the entire disc)
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     ctx.fillStyle = "#FFFFFF";
 
                     // "Salmany" - bold italic stylized signature script
-                    var sSize = Math.round(baseRadius * 0.38);
+                    var sSize = Math.round(staticRadius * 0.38);
                     ctx.font = "italic 900 " + sSize + "px 'URW Gothic', 'Liberation Sans', 'Noto Sans', sans-serif";
-                    ctx.fillText("Salmany", cx, cy - baseRadius * 0.18);
+                    ctx.fillText("Salmany", 0, -staticRadius * 0.18);
 
                     // Dynamic signature underline slash across Salmany in bold crisp white
                     ctx.beginPath();
-                    ctx.lineWidth = Math.max(2.8, baseRadius * 0.038);
+                    ctx.lineWidth = Math.max(2.8, staticRadius * 0.038);
                     ctx.strokeStyle = "#FFFFFF";
-                    ctx.moveTo(cx - baseRadius * 0.46, cy - baseRadius * 0.02);
-                    ctx.lineTo(cx + baseRadius * 0.46, cy - baseRadius * 0.07);
+                    ctx.moveTo(-staticRadius * 0.46, -staticRadius * 0.02);
+                    ctx.lineTo(staticRadius * 0.46, -staticRadius * 0.07);
                     ctx.stroke();
 
                     // "NATION" - bold uppercase geometric block typography with wide tracking
-                    var nSize = Math.round(baseRadius * 0.22);
+                    var nSize = Math.round(staticRadius * 0.22);
                     ctx.font = "900 " + nSize + "px 'URW Gothic', 'Liberation Sans', 'Nimbus Sans', sans-serif";
-                    ctx.fillText("N  A  T  I  O  N", cx, cy + baseRadius * 0.16);
+                    ctx.fillText("N  A  T  I  O  N", 0, staticRadius * 0.16);
 
                     ctx.restore();
                 }
