@@ -234,8 +234,8 @@ ApplicationWindow {
                 if (backend.mode === 1) {
                     ctx.globalAlpha = 1.0; // Reset full opacity (essential for crisp solid rendering)
                     var minDim = Math.min(width, height);
-                    // Responsive subwoofer disc radius: scales with screen, pulses subtly on heavy 808 kicks
-                    var baseRadius = minDim * 0.22 * (1.0 + backend.bass * 0.035);
+                    // Responsive subwoofer disc radius: scales with screen, pulses organically with bass notes
+                    var baseRadius = minDim * 0.22 * (1.0 + backend.bass * 0.065);
                     var baseOutline = Math.max(6.0, baseRadius * 0.08); // sleek circular ring during calm parts
                     var N = 96;
                     var halfN = N / 2;
@@ -258,9 +258,8 @@ ApplicationWindow {
                         var symIdx = (i <= halfN) ? i : (N - i);
                         var t = symIdx / halfN; // 0.0 at top 12 o'clock, 1.0 at bottom 6 o'clock
 
-                        // Logarithmic-frequency mapping across the 64 bars
-                        // Concentrates bass & punch across the upper horns, with natural mid & treble spread
-                        var bIdx = Math.pow(t, 0.78) * (numBars - 1);
+                        // Fine-tuned frequency distribution giving sub-bass and bass bars rich articulation across the horns
+                        var bIdx = Math.pow(t, 1.08) * (numBars - 1);
                         var i0 = Math.floor(bIdx);
                         var i1 = Math.min(numBars - 1, i0 + 1);
                         var frac = bIdx - i0;
@@ -269,10 +268,10 @@ ApplicationWindow {
                         // Authentic audio excursion directly driven by frequency amplitude
                         var targetVal = rawFreq;
 
-                        // Fast attack on beat hits for instant transient response; smooth elastic spring decay
+                        // Snappy attack for immediate transient punch; smooth fluid decay
                         var cur = tAmps[i];
                         if (targetVal > cur) {
-                            cur = cur * 0.25 + targetVal * 0.75;
+                            cur = cur * 0.18 + targetVal * 0.82;
                         } else {
                             cur = cur * 0.82;
                         }
@@ -286,7 +285,7 @@ ApplicationWindow {
                         var p1 = (s - 1 + N) % N;
                         var n1 = (s + 1) % N;
                         var n2 = (s + 2 + N) % N;
-                        smoothed[s] = tAmps[p2] * 0.08 + tAmps[p1] * 0.24 + tAmps[s] * 0.36 + tAmps[n1] * 0.24 + tAmps[n2] * 0.08;
+                        smoothed[s] = tAmps[p2] * 0.06 + tAmps[p1] * 0.24 + tAmps[s] * 0.40 + tAmps[n1] * 0.24 + tAmps[n2] * 0.06;
                     }
 
                     // 3. Compute Radii with Natural Excursion:

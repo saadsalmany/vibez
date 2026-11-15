@@ -32,7 +32,7 @@ void Backend::startCava() {
         << "framerate = 60\n"
         << "autosens = 1\n"
         << "bars = 64\n"
-        << "lower_cutoff_freq = 40\n"
+        << "lower_cutoff_freq = 25\n"
         << "higher_cutoff_freq = 16000\n\n"
         << "[input]\n"
         << "method = pipewire\n"
@@ -47,7 +47,7 @@ void Backend::startCava() {
         << "monstercat = 0\n"
         << "integral = 65\n"
         << "gravity = 100\n"
-        << "noise_reduction = 0.50\n";
+        << "noise_reduction = 0.25\n";
     m_configFile.flush();
 
     connect(&m_cavaProcess, &QProcess::readyReadStandardOutput, this, &Backend::onCavaOutput);
@@ -87,31 +87,31 @@ void Backend::onCavaOutput() {
             m_bars[i] = m_bars[i] * 0.78 + val * 0.22;
         }
 
-        // Sub-bass & Bass: Bars 0-11 (40Hz - 350Hz)
-        if (i < 12) {
+        // Sub-bass & Bass: Bars 0-7 (25Hz - 180Hz)
+        if (i < 8) {
             bassSum += m_bars[i];
             if (m_bars[i] > bassMax) {
                 bassMax = m_bars[i];
             }
-        } else if (i < 36) {
-            // Mids & Vocals: Bars 12-35 (350Hz - 3200Hz)
+        } else if (i < 32) {
+            // Mids & Vocals: Bars 8-31 (180Hz - 2800Hz)
             midSum += m_bars[i];
         } else {
-            // Treble & High Sparkle: Bars 36-63 (3200Hz - 16000Hz)
+            // Treble & High Sparkle: Bars 32-63 (2800Hz - 16000Hz)
             trebSum += m_bars[i];
         }
     }
 
     // Accurate representation of bass, mid, and treble levels
-    m_bass = bassMax * 0.70 + (bassSum / 12.0) * 0.30;
+    m_bass = bassMax * 0.75 + (bassSum / 8.0) * 0.25;
     m_mid = midSum / 24.0;
-    m_treble = trebSum / 28.0;
+    m_treble = trebSum / 32.0;
 
     // -------------------------------------------------------------
     // Authentic 808 Kick Drum & Beat Transient Detection
     // -------------------------------------------------------------
     qreal kickVal = 0.0;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 6; ++i) {
         if (m_bars[i] > kickVal) {
             kickVal = m_bars[i];
         }
